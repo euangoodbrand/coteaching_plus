@@ -47,7 +47,7 @@ parser.add_argument('--dataset', type = str, help = 'cicids', default = 'cicids'
 parser.add_argument('--n_epoch', type=int, default=200)
 parser.add_argument('--optimizer', type = str, default='adam')
 parser.add_argument('--seed', type=int, default=1)
-parser.add_argument('--print_freq', type=int, default=1)
+parser.add_argument('--print_freq', type=int, default=100)
 parser.add_argument('--num_workers', type=int, default=1, help='how many subprocesses to use for data loading')
 parser.add_argument('--epoch_decay_start', type=int, default=80)
 parser.add_argument('--model_type', type = str, help='[coteaching, coteaching_plus]', default='coteaching_plus')

@@ -7,5 +7,7 @@ do
     CUDA_LAUNCH_BLOCKING=1 python main.py --dataset cicids --model_type ${model_type} --noise_type symmetric --noise_rate 0.1 --seed ${seed} --num_workers ${num_workers} --result_dir results/trial_${seed}/
     # CUDA_LAUNCH_BLOCKING=1 python main.py --dataset cicids --model_type ${model_type} --noise_type symmetric --noise_rate 0.2 --seed ${seed} --num_workers ${num_workers} --result_dir results/trial_${seed}/
     # CUDA_LAUNCH_BLOCKING=1 python main.py --dataset cicids --model_type ${model_type} --noise_type pairflip --noise_rate 0.3 --seed ${seed} --num_workers ${num_workers} --result_dir results/trial_${seed}/
+    # CUDA_LAUNCH_BLOCKING=1 python main.py --dataset cicids --model_type ${model_type} --noise_type symmetric --noise_rate 0.0 --seed ${seed} --num_workers ${num_workers} --result_dir results/trial_${seed}/
+
   done
 done

@@ -46,14 +46,14 @@ def loss_coteaching(y_1, y_2, t, forget_rate, ind, noise_or_not):
     return torch.sum(loss_1_update)/num_remember, torch.sum(loss_2_update)/num_remember, pure_ratio_1, pure_ratio_2
 
 def loss_coteaching_plus(logits, logits2, labels, forget_rate, ind, noise_or_not, step):
-    with open('loss_coteaching_plus_logs.txt', 'a') as f:
-            f.write("noise_or_not : {}\n".format(noise_or_not))
-            f.write("ind: {}\n".format(ind))
-            f.write("logits: {}\n".format(logits))
-            f.write("logits2: {}\n".format(logits2))
-            f.write("labels: {}\n".format(labels))
-            f.write("forget_rate: {}\n".format(forget_rate))
-            f.write("step: {}\n\n".format(step))
+    # with open('loss_coteaching_plus_logs.txt', 'a') as f:
+    #         f.write("noise_or_not : {}\n".format(noise_or_not))
+    #         f.write("ind: {}\n".format(ind))
+    #         f.write("logits: {}\n".format(logits))
+    #         f.write("logits2: {}\n".format(logits2))
+    #         f.write("labels: {}\n".format(labels))
+    #         f.write("forget_rate: {}\n".format(forget_rate))
+    #         f.write("step: {}\n\n".format(step))
             
             # Also print the values to the console
             # print("noise_or_not :", noise_or_not)
@@ -92,7 +92,7 @@ def loss_coteaching_plus(logits, logits2, labels, forget_rate, ind, noise_or_not
     update_step = Variable(torch.from_numpy(_update_step)).cuda()
 
     if len(disagree_id) > 0:
-        print(">1")
+        # print(">1")
         update_labels = labels[disagree_id]
         update_outputs = outputs[disagree_id] 
         update_outputs2 = outputs2[disagree_id] 
