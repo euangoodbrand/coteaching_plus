@@ -26,6 +26,7 @@ To run the co-teaching+ model on the NIDS dataset, adjust the parameters as need
 
 ```bash
 python main.py --dataset cicids --model_type coteaching_plus --noise_type symmetric --noise_rate 0.2 --seed 1 --num_workers 4 --result_dir results/trial_1/
+```
 
 ## Customization
 
