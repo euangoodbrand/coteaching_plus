@@ -56,13 +56,13 @@ def loss_coteaching_plus(logits, logits2, labels, forget_rate, ind, noise_or_not
             f.write("step: {}\n\n".format(step))
             
             # Also print the values to the console
-            print("noise_or_not :", noise_or_not)
-            print("ind:", ind)
-            print("logits:", logits)
-            print("logits2:", logits2)
-            print("labels:", labels)
-            print("forget_rate:", forget_rate)
-            print("step:", step)
+            # print("noise_or_not :", noise_or_not)
+            # print("ind:", ind)
+            # print("logits:", logits)
+            # print("logits2:", logits2)
+            # print("labels:", labels)
+            # print("forget_rate:", forget_rate)
+            # print("step:", step)
 
     outputs = F.softmax(logits, dim=1)
     outputs2 = F.softmax(logits2, dim=1)
@@ -111,11 +111,11 @@ def loss_coteaching_plus(logits, logits2, labels, forget_rate, ind, noise_or_not
  
         pure_ratio_1 = np.sum(noise_or_not[ind])/ind.shape[0]
         pure_ratio_2 = np.sum(noise_or_not[ind])/ind.shape[0]
-        print("xx")
-        print(loss_1)
-        print(loss_2)
-        print(pure_ratio_1)
-        print(pure_ratio_2)
-        print("xx")
+        # print("xx")
+        # print(loss_1)
+        # print(loss_2)
+        # print(pure_ratio_1)
+        # print(pure_ratio_2)
+        # print("xx")
 
     return loss_1, loss_2, pure_ratio_1, pure_ratio_2  

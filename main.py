@@ -349,7 +349,7 @@ def main():
 
 
         # Introduce label and feature noise AFTER splitting
-        labels_noisy, noise_or_not = introduce_label_noise(labels_np, noise_rate=0.2)  # Adjust as per your function's implementation
+        labels_noisy, noise_or_not = introduce_label_noise(labels_np, noise_rate=0.2) 
 
 
         # Save the numpy arrays
