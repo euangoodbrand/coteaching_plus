@@ -26,3 +26,33 @@ To run the co-teaching+ model on the NIDS dataset, adjust the parameters as need
 
 ```bash
 python main.py --dataset cicids --model_type coteaching_plus --noise_type symmetric --noise_rate 0.2 --seed 1 --num_workers 4 --result_dir results/trial_1/
+
+## Customization
+
+- `--lr`: Learning rate for the optimizer.
+- `--noise_rate`: The simulated rate of label noise in the dataset.
+- `--num_gradual`: Specifies how many epochs for linear drop rate.
+- `--num_workers`: The number of subprocesses to use for data loading.
+- Additional arguments are available in `main.py` for further customization.
+
+## Citation
+
+If you find this implementation helpful for your research, please consider citing the original paper:
+
+```bash
+@inproceedings{yu2019does,
+  title={How does Disagreement Help Generalization against Label Corruption?},
+  author={Yu, Xingrui and Han, Bo and Yao, Jiangchao and Niu, Gang and Tsang, Ivor and Sugiyama, Masashi},
+  booktitle={International Conference on Machine Learning},
+  pages={7164--7173},
+  year={2019}
+}
+
+Additionally, if you utilize this adaptation for your research, please reference this repository and the dataset accordingly.
+
+
+## Acknowledgments
+
+This project is inspired by the work of Xingrui Yu et al., on leveraging disagreement for improving generalization in the presence of label noise. Our adaptation focuses on the specific challenges posed by the NIDS domain.
+
+Feel free to adjust the content to better suit your project or presentation needs.
