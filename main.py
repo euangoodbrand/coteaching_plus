@@ -22,6 +22,8 @@ import torch.nn.init as init
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from imblearn.over_sampling import SMOTE
+from torch.optim import AdamW
+
 
 for dirname, _, filenames in os.walk('/data'):
     for filename in filenames:
@@ -37,7 +39,7 @@ import os
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--lr', type = float, default = 0.001)
+parser.add_argument('--lr', type = float, default = 0.0001)
 parser.add_argument('--result_dir', type = str, help = 'dir to save result txt files', default = 'results/')
 parser.add_argument('--noise_rate', type = float, help = 'corruption rate, should be less than 1', default = 0.2)
 parser.add_argument('--forget_rate', type = float, help = 'forget rate', default = None)
@@ -47,7 +49,7 @@ parser.add_argument('--dataset', type = str, help = 'cicids', default = 'cicids'
 parser.add_argument('--n_epoch', type=int, default=200)
 parser.add_argument('--optimizer', type = str, default='adam')
 parser.add_argument('--seed', type=int, default=1)
-parser.add_argument('--print_freq', type=int, default=100)
+parser.add_argument('--print_freq', type=int, default=500)
 parser.add_argument('--num_workers', type=int, default=1, help='how many subprocesses to use for data loading')
 parser.add_argument('--epoch_decay_start', type=int, default=80)
 parser.add_argument('--model_type', type = str, help='[coteaching, coteaching_plus]', default='coteaching_plus')
@@ -101,18 +103,10 @@ class CICIDSDataset(Dataset):
     def __len__(self):
         return len(self.labels)
 
-
-
-
-
-
 if args.forget_rate is None:
     forget_rate=args.noise_rate
 else:
     forget_rate=args.forget_rate
-
-
-
 
 # Adjust learning rate and betas for Adam Optimizer
 mom1 = 0.9
@@ -164,7 +158,6 @@ def accuracy(logit, target, topk=(1,)):
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
-
 
 
 def train(train_dataset, train_loader, epoch, model1, optimizer1, model2, optimizer2, noise_or_not):
@@ -262,8 +255,6 @@ def weights_init(m):
         init.kaiming_normal_(m.weight.data)   # Kaiming initialization for convolutional layers
         if m.bias is not None:
             init.constant_(m.bias.data, 0)     # Initialize bias to zero
-
-
 
 def main():
 
@@ -408,7 +399,6 @@ def main():
     print(clf1.parameters)
 
     print(clf2.parameters)
-
 
     result_dir_path = os.path.dirname(txtfile)
     if not os.path.exists(result_dir_path):
