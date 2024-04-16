@@ -6,15 +6,15 @@ class MLPNet(nn.Module):
     def __init__(self, num_features=78, num_classes=15):
         super(MLPNet, self).__init__()
         # First Fully-Connected Layer
-        self.fc1 = nn.Linear(num_features, 128)
+        self.fc1 = nn.Linear(num_features, 256)
         # Second Fully-Connected Layer
-        self.fc2 = nn.Linear(128, 64)
+        self.fc2 = nn.Linear(256, 128)
         # Third Fully-Connected Layer
-        self.fc3 = nn.Linear(64, num_classes)
+        self.fc3 = nn.Linear(128, num_classes)
         # First Dropout layer
-        self.dropout1 = nn.Dropout(0.5)
-        # Second Dropout layer
-        self.dropout2 = nn.Dropout(0.5)
+        # self.dropout1 = nn.Dropout(0.1)
+        # # Second Dropout layer
+        # self.dropout2 = nn.Dropout(0.1)
 
         # Initialize weights using the Xavier scheme for all dense (fully connected) layers
         self._initialize_weights()
@@ -22,11 +22,11 @@ class MLPNet(nn.Module):
     def forward(self, x):
         # Forward pass through the network followed by activations and dropout layers
         x = F.relu(self.fc1(x))
-        x = self.dropout1(x)
+        # x = self.dropout1(x)
         x = F.relu(self.fc2(x))
-        x = self.dropout2(x)
+        # x = self.dropout2(x)
         x = self.fc3(x)
-        return F.softmax(x, dim=1)  # Apply softmax at the output layer
+        return x 
 
     def _initialize_weights(self):
         # Initialize weights and biases for all fully connected layers

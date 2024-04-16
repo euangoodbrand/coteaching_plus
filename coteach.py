@@ -23,7 +23,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from imblearn.over_sampling import SMOTE
 from torch.optim import AdamW
-
+import csv
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import (
+    accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+)
 
 for dirname, _, filenames in os.walk('/data'):
     for filename in filenames:
@@ -34,26 +39,24 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 nRowsRead = None 
 
-
-import os
-
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--lr', type = float, default = 0.0001)
-parser.add_argument('--result_dir', type = str, help = 'dir to save result txt files', default = 'results/')
-parser.add_argument('--noise_rate', type = float, help = 'corruption rate, should be less than 1', default = 0.2)
-parser.add_argument('--forget_rate', type = float, help = 'forget rate', default = None)
-parser.add_argument('--noise_type', type = str, help='[pairflip, symmetric]', default='symmetric')
-parser.add_argument('--num_gradual', type = int, default = 10, help='how many epochs for linear drop rate. This parameter is equal to Ek for lambda(E) in the paper.')
-parser.add_argument('--dataset', type = str, help = 'cicids', default = 'cicids')
-parser.add_argument('--n_epoch', type=int, default=200)
-parser.add_argument('--optimizer', type = str, default='adam')
+parser.add_argument('--lr', type=float, default=0.0001)
+parser.add_argument('--result_dir', type=str, help='dir to save result txt files', default='results/')
+parser.add_argument('--noise_rate', type=float, help='corruption rate, should be less than 1', default=0.2)
+parser.add_argument('--forget_rate', type=float, help='forget rate', default=None)
+parser.add_argument('--noise_type', type=str, help='[pairflip, symmetric]', default='symmetric')
+parser.add_argument('--num_gradual', type=int, default=10, help='how many epochs for linear drop rate. This parameter is equal to Ek for lambda(E) in the paper.')
+parser.add_argument('--dataset', type=str, help='cicids', default='cicids')
+parser.add_argument('--n_epoch', type=int, default=150)
+parser.add_argument('--optimizer', type=str, default='adam')
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--print_freq', type=int, default=500)
 parser.add_argument('--num_workers', type=int, default=1, help='how many subprocesses to use for data loading')
 parser.add_argument('--epoch_decay_start', type=int, default=80)
-parser.add_argument('--model_type', type = str, help='[coteaching, coteaching_plus]', default='coteaching_plus')
-parser.add_argument('--fr_type', type = str, help='forget rate type', default='type_1')
+parser.add_argument('--model_type', type=str, help='[coteaching, coteaching_plus]', default='coteaching_plus')
+parser.add_argument('--fr_type', type=str, help='forget rate type', default='type_1')
+parser.add_argument('--data_augmentation', type=str, default=None, help='data augmentation technique, if any')
+
 args = parser.parse_args()
 
 
@@ -62,10 +65,30 @@ torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
 # Hyper Parameters
-batch_size = 128
+batch_size = 256
 learning_rate = args.lr 
 init_epoch = 0
 
+
+class CICIDSDataset(Dataset):
+    def __init__(self, features, labels, noise_or_not):
+        self.features = features
+        self.labels = labels
+        self.noise_or_not = noise_or_not 
+
+    def __getitem__(self, index):
+        feature = torch.tensor(self.features[index], dtype=torch.float32)
+        label = torch.tensor(self.labels[index], dtype=torch.long)
+        return feature, label, index  
+
+    def __len__(self):
+        return len(self.labels)
+    
+
+if args.forget_rate is None:
+    forget_rate=args.noise_rate
+else:
+    forget_rate=args.forget_rate
 
 
 def introduce_label_noise(labels, noise_rate=args.noise_rate):
@@ -89,24 +112,6 @@ def introduce_label_noise(labels, noise_rate=args.noise_rate):
 
     return labels, noise_or_not
 
-class CICIDSDataset(Dataset):
-    def __init__(self, features, labels, noise_or_not):
-        self.features = features
-        self.labels = labels
-        self.noise_or_not = noise_or_not 
-
-    def __getitem__(self, index):
-        feature = torch.tensor(self.features[index], dtype=torch.float32)
-        label = torch.tensor(self.labels[index], dtype=torch.long)
-        return feature, label, index  
-
-    def __len__(self):
-        return len(self.labels)
-
-if args.forget_rate is None:
-    forget_rate=args.noise_rate
-else:
-    forget_rate=args.forget_rate
 
 # Adjust learning rate and betas for Adam Optimizer
 mom1 = 0.9
@@ -207,41 +212,6 @@ def train(train_dataset, train_loader, epoch, model1, optimizer1, model2, optimi
     train_acc2=float(train_correct2)/float(train_total2)
     return train_acc1, train_acc2
 
-# Evaluate the Model
-def evaluate(test_loader, model1, model2):
-    print('Evaluating %s...' % model_str)
-    model1.eval()    # Change model to 'eval' mode.
-    correct1 = 0
-    total1 = 0
-    for data, labels, _ in test_loader:
-        if args.dataset=='news':
-            data = Variable(data.long()).cuda()
-        else:
-            data = Variable(data).cuda()
-        logits1 = model1(data)
-        outputs1 = F.softmax(logits1, dim=1)
-        _, pred1 = torch.max(outputs1.data, 1)
-        total1 += labels.size(0)
-        correct1 += (pred1.cpu() == labels.long()).sum()
-
-    model2.eval()    # Change model to 'eval' mode 
-    correct2 = 0
-    total2 = 0
-    for data, labels, _ in test_loader:
-        if args.dataset=='news':
-            data = Variable(data.long()).cuda()
-        else:
-            data = Variable(data).cuda()
-        logits2 = model2(data)
-        outputs2 = F.softmax(logits2, dim=1)
-        _, pred2 = torch.max(outputs2.data, 1)
-        total2 += labels.size(0)
-        correct2 += (pred2.cpu() == labels.long()).sum()
- 
-    acc1 = 100*float(correct1)/float(total1)
-    acc2 = 100*float(correct2)/float(total2)
-    return acc1, acc2
-
 
 def weights_init(m):
     if isinstance(m, nn.Linear):
@@ -255,6 +225,100 @@ def weights_init(m):
         init.kaiming_normal_(m.weight.data)   # Kaiming initialization for convolutional layers
         if m.bias is not None:
             init.constant_(m.bias.data, 0)     # Initialize bias to zero
+
+# Evaluate the Model
+def evaluate(test_loader, model1, model2, args):
+    print('Evaluating models...')
+    model1.eval()  # Set model1 to evaluation mode
+    model2.eval()  # Set model2 to evaluation mode
+    
+    all_preds1 = []
+    all_labels1 = []
+    all_preds2 = []
+    all_labels2 = []
+    
+    with torch.no_grad():
+        for data, labels, _ in test_loader:
+            labels = labels.long()
+            if args.dataset == 'news':
+                data = Variable(data.long()).cuda()
+            else:
+                data = Variable(data).cuda()
+            
+            # Evaluate model1
+            logits1 = model1(data)
+            outputs1 = F.softmax(logits1, dim=1)
+            _, pred1 = torch.max(outputs1.data, 1)
+            all_preds1.extend(pred1.cpu().numpy())
+            all_labels1.extend(labels.cpu().numpy())
+            
+            # Evaluate model2
+            logits2 = model2(data)
+            outputs2 = F.softmax(logits2, dim=1)
+            _, pred2 = torch.max(outputs2.data, 1)
+            all_preds2.extend(pred2.cpu().numpy())
+            all_labels2.extend(labels.cpu().numpy())
+
+    # Calculate metrics and class accuracy for both models
+    metrics1, class_accuracy1 = calculate_metrics_and_class_accuracy(all_labels1, all_preds1)
+    metrics2, class_accuracy2 = calculate_metrics_and_class_accuracy(all_labels2, all_preds2)
+
+    # Save confusion matrix for both models
+    save_confusion_matrix(all_labels1, all_preds1, 'model1', args)
+    save_confusion_matrix(all_labels2, all_preds2, 'model2', args)
+
+    return (metrics1, class_accuracy1), (metrics2, class_accuracy2)
+
+def calculate_metrics_and_class_accuracy(labels, preds):
+    metrics = {
+        'accuracy': accuracy_score(labels, preds),
+        'balanced_accuracy': balanced_accuracy_score(labels, preds),
+        'precision_macro': precision_score(labels, preds, average='macro', zero_division=0),
+        'recall_macro': recall_score(labels, preds, average='macro', zero_division=0),
+        'f1_macro': f1_score(labels, preds, average='macro', zero_division=0)
+    }
+    class_accuracy = calculate_class_accuracy(labels, preds)
+    return metrics, class_accuracy
+
+def calculate_class_accuracy(labels, preds):
+    unique_labels = np.unique(labels)
+    class_acc = {}
+    for label in unique_labels:
+        indices = [i for i, x in enumerate(labels) if x == label]
+        class_acc[label] = np.mean([preds[i] == labels[i] for i in indices])
+    return class_acc
+
+def save_confusion_matrix(labels, preds, model_name, args):
+    # Calculate confusion matrix, normalized
+    cm = confusion_matrix(labels, preds, normalize='true')
+    
+    # Create a plot with specific dimensions and a custom diverging palette
+    plt.figure(figsize=(10, 7))
+    cmap = sns.diverging_palette(220, 20, as_cmap=True)
+    sns.heatmap(cm, annot=True, fmt='.2f', cmap=cmap)
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+
+    # Enhanced title with formatting
+    augmentation = args.data_augmentation if args.data_augmentation and args.data_augmentation.lower() != 'none' else "No Augmentation"
+    title = f"Confusion Matrix for {model_name} on {args.dataset}\nAugmentation: {augmentation}, Noise Rate: {args.noise_rate}"
+    plt.title(title)
+    
+    # Ensure the directory exists
+    matrix_dir = os.path.join(args.result_dir, 'confusion_matrix')
+    if not os.path.exists(matrix_dir):
+        os.makedirs(matrix_dir)
+    
+    # Formulate the filename based on dataset characteristics
+    matrix_filename = f"{args.dataset}_{args.noise_rate}_{augmentation.replace(' ', '_').lower()}_{model_name}_confusion_matrix.png"
+    plt.savefig(os.path.join(matrix_dir, matrix_filename))
+    plt.close()
+
+
+def format_class_accuracies(class_accuracies):
+    return ' '.join([f'class_{label}_acc: {acc:.4f}' for label, acc in class_accuracies.items()])
+
+
 
 def main():
 
@@ -288,79 +352,64 @@ def main():
 
         df.to_csv(preprocessed_file_path, index=False)
 
-    if os.path.exists('numpy_data/features.npy'):
-        print("Preprocessed data exists, loading...")
-        features_np_standardized = np.load('numpy_data/features.npy')
-        labels_np = np.load('numpy_data/labels.npy')
-        indices = np.load('numpy_data/indices.npy')
-        X_train_smote = np.load('numpy_data/X_train.npy')
-        y_train_smote = np.load('numpy_data/y_train.npy')
-        X_test = np.load('numpy_data/X_test.npy')
-        y_test = np.load('numpy_data/y_test.npy')
-        test_indices = np.load('numpy_data/test_indices.npy')  
-    else:
-        print("Preprocessed data doesn't exists, generating...")
+    # Convert your DataFrame columns to numpy arrays if not already done
+    features_np = df.drop('Label', axis=1).values.astype(np.float32)  
+    labels_np = LabelEncoder().fit_transform(df['Label'].values)
 
-        # Convert your DataFrame columns to numpy arrays if not already done
-        features_np = df.drop('Label', axis=1).values.astype(np.float32)  
-        labels_np = LabelEncoder().fit_transform(df['Label'].values)
+    # Check for inf and -inf values
+    print("Contains inf: ", np.isinf(features_np).any())
+    print("Contains -inf: ", np.isneginf(features_np).any())
 
-        # Check for inf and -inf values
-        print("Contains inf: ", np.isinf(features_np).any())
-        print("Contains -inf: ", np.isneginf(features_np).any())
+    # Check for NaN values
+    print("Contains NaN: ", np.isnan(features_np).any())
 
-        # Check for NaN values
-        print("Contains NaN: ", np.isnan(features_np).any())
+    # Convert your DataFrame columns to numpy arrays if not already done
+    features_np = df.drop('Label', axis=1).values.astype(np.float32)
+    labels_np = LabelEncoder().fit_transform(df['Label'].values)
 
-        # Replace inf/-inf with NaN
-        features_np[np.isinf(features_np) | np.isneginf(features_np)] = np.nan
+    # Check for inf and -inf values
+    print("Contains inf: ", np.isinf(features_np).any())
+    print("Contains -inf: ", np.isneginf(features_np).any())
 
-        # Impute NaN values with the median of each column
-        imputer = SimpleImputer(strategy='median')
-        features_np_imputed = imputer.fit_transform(features_np)
+    # Check for NaN values
+    print("Contains NaN: ", np.isnan(features_np).any())
 
-        # Initialize the StandardScaler
-        scaler = StandardScaler()
+    # Replace inf/-inf with NaN
+    features_np[np.isinf(features_np) | np.isneginf(features_np)] = np.nan
 
-        # Fit on the imputed features data and transform it to standardize
-        features_np_standardized = scaler.fit_transform(features_np_imputed)
+    # Impute NaN values with the median of each column
+    imputer = SimpleImputer(strategy='median')
+    features_np_imputed = imputer.fit_transform(features_np)
 
-        # Generate indices for your dataset, which will be used for splitting
-        indices = np.arange(len(labels_np))
+    # Initialize the StandardScaler
+    scaler = StandardScaler()
 
-        # Split indices into training and testing sets
-        train_indices, test_indices, y_train, y_test = train_test_split(indices, labels_np, test_size=0.3, random_state=42)
+    # Fit on the imputed features data and transform it to standardize
+    features_np_standardized = scaler.fit_transform(features_np_imputed)
 
-        # Correctly split the standardized and imputed dataset
-        X_train, X_test, y_train, y_test = train_test_split(features_np_standardized, labels_np, test_size=0.3, random_state=42)
+    # Generate indices for your dataset, which will be used for splitting
+    indices = np.arange(len(labels_np))
 
-        # Apply SMOTE on the correctly preprocessed training data
+    # Correctly split the standardized and imputed dataset
+    X_train, X_test, y_train, y_test = train_test_split(features_np_standardized, labels_np, test_size=0.3, random_state=42)
+
+    # Apply SMOTE on the correctly preprocessed training data only if data_augmentation is 'smote'
+    if args.data_augmentation == 'smote':
         smote = SMOTE(random_state=42)
         X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+    else:
+        X_train_smote, y_train_smote = X_train, y_train
 
+    # Introduce label and feature noise AFTER splitting
+    y_train_smote_noisy, noise_or_not = introduce_label_noise(y_train_smote, noise_rate=args.noise_rate)
 
-        # Introduce label and feature noise AFTER splitting
-        labels_noisy, noise_or_not = introduce_label_noise(labels_np, noise_rate=0.2) 
+    print(noise_or_not)
 
+    # Only apply noisy labels to the training data
+    train_dataset = CICIDSDataset(X_train_smote, y_train_smote_noisy, noise_or_not)
 
-        # Save the numpy arrays
-        print("Saving preprocessd data")
-
-        np.save('numpy_data/features.npy', features_np_standardized)
-        np.save('numpy_data/labels.npy', labels_np)
-        np.save('numpy_data/indices.npy', indices)
-        np.save('numpy_data/X_train.npy', X_train_smote)
-        np.save('numpy_data/y_train.npy', y_train_smote)
-        np.save('numpy_data/X_test.npy', X_test)
-        np.save('numpy_data/y_test.npy', y_test)
-        np.save('numpy_data/test_indices.npy', test_indices)
-
-
-    noise_or_not = np.zeros(len(y_train_smote), dtype=bool)  
-
-    # Create the PyTorch datasets with the SMOTE-applied variables
-    train_dataset = CICIDSDataset(X_train_smote, y_train_smote, noise_or_not)
-    test_dataset = CICIDSDataset(X_test, y_test, noise_or_not[test_indices]) # No SMOTE on test data
+    # Keep the test dataset as is, with clean labels, for evaluation purposes
+    test_dataset = CICIDSDataset(X_test, y_test, noise_or_not)
 
     noise_or_not = train_dataset.noise_or_not
 
@@ -400,39 +449,46 @@ def main():
 
     print(clf2.parameters)
 
+    # Create or ensure the directory for results exists
     result_dir_path = os.path.dirname(txtfile)
     if not os.path.exists(result_dir_path):
         os.makedirs(result_dir_path)
 
+    # Prepare to log basic metrics to a file
     with open(txtfile, "a") as myfile:
-        myfile.write('epoch train_acc1 train_acc2 test_acc1 test_acc2\n')
+        myfile.write('epoch train_acc1 train_acc2 test_acc1 test_acc2 balanced_acc1 balanced_acc2 precision_macro1 precision_macro2 recall_macro1 recall_macro2 f1_macro1 f1_macro2\n')
 
-    epoch=0
-    train_acc1=0
-    train_acc2=0
-    # evaluate models with random weights
-    test_acc1, test_acc2=evaluate(test_loader, clf1, clf2)
-    print('Epoch [%d/%d] Test Accuracy on the %s test data: Model1 %.4f %% Model2 %.4f %%' % (epoch+1, args.n_epoch, len(test_dataset), test_acc1, test_acc2))
-    # save results
+    epoch = 0
+    train_acc1 = 0
+    train_acc2 = 0
+    
+    # Evaluate models with initial (random) weights
+    (metrics1, class_acc1), (metrics2, class_acc2) = evaluate(test_loader, clf1, clf2, args)
+    class_acc_str1 = format_class_accuracies(class_acc1)
+    class_acc_str2 = format_class_accuracies(class_acc2)
+    print(f'Epoch [{epoch+1}/{args.n_epoch}] Test Accuracy on the test data: Model1 {metrics1["accuracy"]:.4f}%, Model2 {metrics2["accuracy"]:.4f}%. {class_acc_str1}, {class_acc_str2}')
+
+    # Log initial evaluation results
     with open(txtfile, "a") as myfile:
-        myfile.write(str(int(epoch)) + ' '  + str(train_acc1) +' '  + str(train_acc2) +' '  + str(test_acc1) + " " + str(test_acc2)  + "\n")
+        myfile.write(f"{epoch} {train_acc1} {train_acc2} {metrics1['accuracy']} {metrics2['accuracy']} {metrics1['balanced_accuracy']} {metrics2['balanced_accuracy']} {metrics1['precision_macro']} {metrics2['precision_macro']} {metrics1['recall_macro']} {metrics2['recall_macro']} {metrics1['f1_macro']} {metrics2['f1_macro']} {class_acc_str1} {class_acc_str2}\n")
 
-    # training
+    # Training loop
     for epoch in range(1, args.n_epoch):
-        # train 
+        # Training models
         clf1.train()
         clf2.train()
-
         adjust_learning_rate(optimizer1, epoch)
         adjust_learning_rate(optimizer2, epoch)
-
         train_acc1, train_acc2 = train(train_dataset, train_loader, epoch, clf1, optimizer1, clf2, optimizer2, noise_or_not)
-        # evaluate models
-        test_acc1, test_acc2 = evaluate(test_loader, clf1, clf2)
-        # save results
-        print('Epoch [%d/%d] Test Accuracy on the %s test data: Model1 %.4f %% Model2 %.4f %%' % (epoch+1, args.n_epoch, len(test_dataset), test_acc1, test_acc2))
+        
+        (metrics1, class_acc1), (metrics2, class_acc2) = evaluate(test_loader, clf1, clf2, args)
+        class_acc_str1 = format_class_accuracies(class_acc1)
+        class_acc_str2 = format_class_accuracies(class_acc2)
+        print(f'Epoch [{epoch+1}/{args.n_epoch}] Test Accuracy on the test data: Model1 {metrics1["accuracy"]:.4f}%, Model2 {metrics2["accuracy"]:.4f}%. {class_acc_str1}, {class_acc_str2}')
+        
+        # Log training and evaluation results
         with open(txtfile, "a") as myfile:
-            myfile.write(str(int(epoch)) + ' '  + str(train_acc1) +' '  + str(train_acc2) +' '  + str(test_acc1) + " " + str(test_acc2) + "\n")
+            myfile.write(f"{epoch} {train_acc1} {train_acc2} {metrics1['accuracy']} {metrics2['accuracy']} {metrics1['balanced_accuracy']} {metrics2['balanced_accuracy']} {metrics1['precision_macro']} {metrics2['precision_macro']} {metrics1['recall_macro']} {metrics2['recall_macro']} {metrics1['f1_macro']} {metrics2['f1_macro']} {class_acc_str1} {class_acc_str2}\n")
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()
